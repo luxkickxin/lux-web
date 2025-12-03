@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>luxkickx.in — Admin</title>
+
+  <style>
+    body{margin:0;font-family:Inter,system-ui,Arial;background:#f7fafc;color:#0f1724}
+    .box{max-width:760px;margin:28px auto;padding:18px;background:#fff;border-radius:12px;border:1px solid #eef2f7}
+    header{display:flex;justify-content:space-between;align-items:center;gap:8px}
+    h1{margin:0;font-size:18px}
+    label{display:block;margin-top:12px;color:#6b7280}
+    input,select,textarea{width:100%;padding:10px;margin-top:6px;border-radius:8px;border:1px solid #e6e9ee;background:#fff}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    button{margin-top:12px;padding:10px 12px;border-radius:8px;border:none;background:#0ea5a4;color:#fff;cursor:pointer}
+    table{width:100%;border-collapse:collapse;margin-top:18px}
+    th,td{padding:8px;border-bottom:1px solid #f1f5f9;text-align:left}
+    img.thumb{width:80px;height:56px;object-fit:cover;border-radius:6px}
+  </style>
+</head>
+<body>
+  <div class="box">
+    <header>
+      <h1>luxkickx.in — Admin</h1>
+      <div style="font-size:13px;color:#6b7280">Realtime DB: products</div>
+    </header>
+
+    <div style="margin-top:12px">
+      <label>Product ID (unique)</label>
+      <input id="p_id" placeholder="e.g. S001" />
+
+      <label>Title</label>
+      <input id="p_title" placeholder="Product title" />
+
+      <div class="row">
+        <div>
+          <label>Category</label>
+          <select id="p_cat">
+            <option value="shoes">shoes</option>
+            <option value="jackets">jackets</option>
+            <option value="watches">watches</option>
+            <option value="crocs">crocs</option>
+            <option value="accessories">accessories</option>
+          </select>
+        </div>
+        <div>
+          <label>Price (INR)</label>
+          <input id="p_price" type="number" placeholder="1999" />
+        </div>
+      </div>
+
+      <label>Image URL</label>
+      <input id="p_img" placeholder="https://..." />
+
+      <label>Description (optional)</label>
+      <textarea id="p_desc" rows="3" placeholder="Short description"></textarea>
+
+      <div style="display:flex;gap:8px">
+        <button onclick="saveProduct()">Save / Add Product</button>
+        <button style="background:#111827" onclick="clearForm()">Clear</button>
+      </div>
+
+      <h3 style="margin-top:18px">Products (Realtime)</h3>
+      <table>
+        <thead><tr><th>Img</th><th>Title</th><th>Cat</th><th>Price</th><th>ID</th><th>Actions</th></tr></thead>
+        <tbody id="productsTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+  <script>
+    // Firebase config (same as index)
+    const firebaseConfig = {
+      apiKey: "AIzaSyCDo5yFg4HT_JJiSulhjdEdZK8ceFHupV4",
+      authDomain: "lux-web-2c715.firebaseapp.com",
+      databaseURL: "https://lux-web-2c715-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "lux-web-2c715",
+      storageBucket: "lux-web-2c715.firebasestorage.app",
+      messagingSenderId: "484541452056",
+      appId: "1:484541452056:web:119d18201cec0881bad86d"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let editingKey = null;
+
+    function saveProduct(){
+      const id = document.getElementById('p_id').value.trim();
+      const title = document.getElementById('p_title').value.trim();
+      const category = document.getElementById('p_cat').value;
+      const price = Number(document.getElementById('p_price').value || 0);
+      const img = document.getElementById('p_img').value.trim();
+      const desc = document.getElementById('p_desc').value.trim();
+
+      if(!id || !title || !price){ alert('Please enter ID, title and price'); return; }
+
+      const payload = { id, title, category, price, img, description: desc };
+
+      // Save under key = id (so it's easy to update/delete)
+      db.ref('products/' + id).set(payload)
+        .then(()=>{
+          alert('Saved');
+          clearForm();
+        })
+        .catch(err=>{ alert('Save failed: ' + err.message) });
+    }
+
+    function clearForm(){
+      editingKey = null;
+      document.getElementById('p_id').value='';
+      document.getElementById('p_title').value='';
+      document.getElementById('p_price').value='';
+      document.getElementById('p_img').value='';
+      document.getElementById('p_desc').value='';
+      document.getElementById('p_cat').value='shoes';
+    }
+
+    function subscribeProducts(){
+      const ref = db.ref('products');
+      ref.on('value', snap=>{
+        const tbody = document.getElementById('productsTbody'); tbody.innerHTML='';
+        snap.forEach(child=>{
+          const p = child.val();
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><img class="thumb" src="${p.img || 'https://via.placeholder.com/120x80'}" /></td>
+            <td>${p.title || ''}</td>
+            <td>${p.category || ''}</td>
+            <td>₹${p.price || 0}</td>
+            <td>${p.id || child.key}</td>
+            <td>
+              <button onclick='editProduct("${child.key}")' style="margin-right:6px">Edit</button>
+              <button onclick='deleteProduct("${child.key}")' style="background:#ef4444">Delete</button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      });
+    }
+
+    window.editProduct = function(key){
+      db.ref('products/' + key).once('value').then(snap=>{
+        const p = snap.val();
+        if(!p) return;
+        editingKey = key;
+        document.getElementById('p_id').value = p.id || key;
+        document.getElementById('p_title').value = p.title || '';
+        document.getElementById('p_price').value = p.price || '';
+        document.getElementById('p_img').value = p.img || '';
+        document.getElementById('p_desc').value = p.description || '';
+        document.getElementById('p_cat').value = p.category || 'shoes';
+        window.scrollTo({top:0,behavior:'smooth'});
+      });
+    }
+
+    window.deleteProduct = function(key){
+      if(!confirm('Delete product?')) return;
+      db.ref('products/' + key).remove()
+        .then(()=> alert('Deleted'))
+        .catch(e=> alert('Delete failed: ' + e.message));
+    }
+
+    // start listening
+    subscribeProducts();
+  </script>
+</body>
+</html>
